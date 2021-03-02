@@ -61,6 +61,25 @@ for sh in shs:
   #if (sh.bbox[0] > bbox[0] and sh.bbox[2] < bbox[2] and sh.bbox[1] > bbox[1] and sh.bbox[3] > bbox[3]):
   countries.append(sh)
 
+# Plot countries.
+overlay = cairo.ImageSurface(cairo.FORMAT_ARGB32, int((xn-x0)*gs*ar), (yn-y0)*gs)
+ctx2 = cairo.Context(overlay)
+ctx2.set_line_width(3)
+ctx2.set_line_join(cairo.LINE_JOIN_BEVEL)
+for c in countries:
+  ctx2.move_to((c.points[0][0]-bbox[0])*ar*gs*10,-(c.points[0][1])*gs)
+  for i, p in enumerate(c.points):
+    if i in c.parts:
+      ctx2.move_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
+    else:
+      ctx2.line_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
+  ctx2.set_source_rgba(1, 1, 1, 0.5)
+  ctx2.set_operator(cairo.Operator.SOURCE)
+  ctx2.fill_preserve()
+  ctx2.set_operator(cairo.Operator.CLEAR)
+  ctx2.set_source_rgb(1, 1, 1)
+  ctx2.stroke()
+
 xRange = range(0,(xn-x0))
 yRange = range(0,(yn-y0))
 t = 0 # Time/frame counter.
@@ -72,29 +91,7 @@ ctx = cairo.Context(image)
 def drawArea(x,y,ms,ctx):
     ctx.set_source_rgb(3-(ms/7.5), 1-(ms/15), 1-(ms/15))
     ctx.rectangle(x*gs,y*gs,gs,gs)
-    ctx.fill()
-
-# Plot countries.
-def drawCountries(ctx):
-    global countries
-    ctx.set_line_width(1)
-    ctx.set_source_rgba(0, 0, 0)
-    for c in countries:
-      ctx.move_to((c.points[0][0]-bbox[0])*ar*gs*10,-(c.points[0][1])*gs)
-      for i, p in enumerate(c.points):
-        if i in c.parts:
-          ctx.move_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
-        else:
-          ctx.line_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
-      ctx.set_source_rgba(1, 1, 1, 0.3)
-      ctx.set_operator(cairo.Operator.SCREEN)
-      ctx.fill_preserve()
-      ctx.set_operator(cairo.Operator.OVER)
-      ctx.set_source_rgba(0, 0, 0)
-      ctx.stroke()
-
-
-    
+    ctx.fill()   
 
 # The vector itself.
 def drawVector(x,y,u,v,ms,ctx):
@@ -111,6 +108,7 @@ def drawVector(x,y,u,v,ms,ctx):
 # Black -> Areas -> Vectors.
 def draw(image, ctx):
     global t
+    global overlay
     if (single or t%m==n): # For multi-threading.
       ctx.set_source_rgb(0, 0, 0)
       ctx.paint()
@@ -120,7 +118,8 @@ def draw(image, ctx):
           vt = v[t,y,x]
           ms = math.sqrt(ut*ut+vt*vt)
           drawArea(x*ar,y,ms,ctx)
-      drawCountries(ctx)
+      ctx.set_source_surface(overlay)
+      ctx.paint()
       for y in yRange:
         for x in xRange:
           if (x%step == y%step==0):
