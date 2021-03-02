@@ -73,11 +73,11 @@ for c in countries:
       ctx2.move_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
     else:
       ctx2.line_to((p[0]-bbox[0])*gs*4*ar,-(p[1]-bbox[3])*gs*4)
-  ctx2.set_source_rgba(1, 1, 1, 0.5)
+  #ctx2.set_source_rgba(1, 1, 1, 0.5)
+  #ctx2.set_operator(cairo.Operator.SOURCE)
+  #ctx2.fill_preserve()
   ctx2.set_operator(cairo.Operator.SOURCE)
-  ctx2.fill_preserve()
-  ctx2.set_operator(cairo.Operator.CLEAR)
-  ctx2.set_source_rgb(1, 1, 1)
+  ctx2.set_source_rgba(1, 1, 1, 0.5)
   ctx2.stroke()
 
 xRange = range(0,(xn-x0))
