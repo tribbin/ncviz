@@ -3,6 +3,7 @@
 import sys, math, numpy, cairo, gi, shapefile, threading, time
 from datetime import datetime, timezone, timedelta
 from scipy import interpolate
+from scipy.interpolate import RegularGridInterpolator as rgi
 
 try:
     gi.require_foreign("cairo")
@@ -10,7 +11,7 @@ except ImportError:
     print("cairo missing :(")
 
 # Performance and output
-th    = 6         # Number of threads.
+th    = 8         # Number of threads.
 outx  = 3840      # Pixels X.
 outy  = 2160      # Pixels Y.
 gs    = 20        # Grid size in pixels.
@@ -64,23 +65,14 @@ ds = Dataset(filename, "r", format="NETCDF4")
 print("Reading dataset finished; interpolating data.")
 t0 = 0
 tn = ds.dimensions['time'].size
-#t0 = 1000 # test
-#tn = 100 # test
-u = [None for i in range(tn)]
-v = [None for i in range(tn)]
-ts = [None for i in range(tn)]
-temp = [None for i in range(tn)]
-tsx = numpy.arange(-15.0,13.0,0.14)
-tsy = numpy.arange(48.5,59.5,0.14*ar)
-for i in range(0,tn):
-  dsut = interpolate.interp2d(ds.variables['longitude'][:],ds.variables['latitude'][:],ds.variables['u10'][t0+i], kind='cubic')
-  dsvt = interpolate.interp2d(ds.variables['longitude'][:],ds.variables['latitude'][:],ds.variables['v10'][t0+i], kind='cubic')
-  dstt = interpolate.interp2d(ds.variables['longitude'][:],ds.variables['latitude'][:],ds.variables['t2m'][t0+i], kind='cubic')
-  u[i] = dsut(tsx,tsy)
-  v[i] = dsvt(tsx,tsy)
-  ts[i] = ds.variables['time'][t0+i]
-  temp[i] = dstt(tsx,tsy)
+timerange = numpy.arange(ds.variables['time'][t0],ds.variables['time'][tn-1],2/3)
+xr = numpy.arange(-15.0,13.0,0.14)
+yr = numpy.arange(48.5,59.5,0.14*ar)
+u = rgi((ds.variables['time'][t0:tn],ds.variables['latitude'][:],ds.variables['longitude'][:]),ds.variables['u10'][t0:tn])
+v = rgi((ds.variables['time'][t0:tn],ds.variables['latitude'][:],ds.variables['longitude'][:]),ds.variables['v10'][t0:tn])
+temp = rgi((ds.variables['time'][t0:tn],ds.variables['latitude'][:],ds.variables['longitude'][:]),ds.variables['t2m'][t0:tn])
 ds.close()
+
 print("Interpolating data finished; plotting countries.")
 
 # Get countries from shapefile.
@@ -138,19 +130,24 @@ def drawInfo(ctx,timestamp):
     ctx.set_source_rgba(1,1,1,0.8)
     ctx.move_to(25, 55)
     ctx.set_font_size(30)
-    ctx.show_text(timestamp.strftime("%Y: %B %d %H:00"))
+    ctx.show_text(timestamp.strftime("%Y: %B %d %H:%M"))
 
 # Black -> Areas -> Vectors.
 def draw(image, ctx, n):
     global overlay
     ctx.set_source_rgb(0, 0, 0)
     ctx.paint()
+    meshgrid = numpy.meshgrid(timerange[t[n]],yr,xr)
+    d2 = numpy.array(meshgrid)
+    u2d = u(d2.T)
+    v2d = v(d2.T)
+    t2d = temp(d2.T)
     for y in xRange:
       for x in yRange:
         td[n]['zero'] = time.time()
-        ut = u[t[n]][x][y]
-        vt = v[t[n]][x][y]
-        tt = temp[t[n]][x][y]
+        ut = u2d[y][0][x]
+        vt = v2d[y][0][x]
+        tt = t2d[y][0][x]
         td[n]['matrix'] += time.time() - td[n]['zero']
         td[n]['zero'] = time.time()
         ms = math.sqrt(ut*ut+vt*vt)
@@ -160,12 +157,12 @@ def draw(image, ctx, n):
         td[n]['area'] += time.time() - td[n]['zero']
     ctx.set_source_surface(overlay)
     ctx.paint()
-    for y in xRange:
-      for x in yRange:
-        if (x%step == y%step==get):
+    for yn, y in enumerate(xRange):
+      for xn, x in enumerate(yRange):
+        if (xn%step == yn%step==get):
           td[n]['zero'] = time.time()
-          ut = u[t[n]][x][y]
-          vt = v[t[n]][x][y]
+          ut = u2d[y][0][x]
+          vt = v2d[y][0][x]
           td[n]['matrix'] += time.time() - td[n]['zero']
           td[n]['zero'] = time.time()
           ms = math.sqrt(ut*ut+vt*vt)
@@ -173,7 +170,7 @@ def draw(image, ctx, n):
           td[n]['zero'] = time.time()
           drawVector(y,x,ut,vt,ms,ctx)
           td[n]['vector'] += time.time() - td[n]['zero']
-    drawInfo(ctx,(epoch+timedelta(hours=int(ts[t[n]]))))
+    drawInfo(ctx,(epoch+timedelta(hours=(timerange[t[n]]))))
     td[n]['zero'] = time.time()
     image.write_to_png("output/wind_"+str(format(t[n], '05'))+".png");
     td[n]['write'] = time.time() - td[n]['zero']
